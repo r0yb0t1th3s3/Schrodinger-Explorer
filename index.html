@@ -1,0 +1,2363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Schrödinger — ψ-Explorer · hydrogen-like eigenstates</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300;12..96,500;12..96,700&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-deep: #06060d;
+    --bg-panel: rgba(13, 16, 28, 0.78);
+    --bg-panel-solid: #0d101c;
+    --border: rgba(0, 212, 255, 0.18);
+    --border-bright: rgba(0, 212, 255, 0.45);
+    --accent: #00d4ff;
+    --accent-warm: #ffb84d;
+    --accent-mag: #ff2d95;
+    --accent-violet: #b864ff;
+    --text: #e8eaf2;
+    --text-dim: #7a8095;
+    --text-faint: #4a4f60;
+    --grid: rgba(0, 212, 255, 0.08);
+    --danger: #ff5d6c;
+    --good: #3dff8a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg-deep);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: radial-gradient(circle at 50% 45%, transparent 0%, rgba(0,0,0,0.55) 80%, rgba(0,0,0,0.88) 100%);
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='5'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.05 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    pointer-events: none !important;
+    opacity: 0.4;
+    z-index: 6;
+    mix-blend-mode: overlay;
+  }
+
+  .panel, .readout, .legend, .btn, input, .esa-toggle, .orb-cell, select { pointer-events: auto; }
+
+  #canvas3d {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+  }
+
+  /* === Title strip === */
+  .title-strip {
+    position: fixed;
+    top: 18px;
+    left: 24px;
+    z-index: 10;
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    pointer-events: none;
+  }
+  .title-strip .glyph {
+    font-family: 'Bricolage Grotesque', serif;
+    font-weight: 300;
+    font-size: 42px;
+    font-style: italic;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    line-height: 1;
+  }
+  .title-strip .glyph em {
+    color: var(--accent);
+    font-style: italic;
+    font-weight: 500;
+  }
+  .title-strip .sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    padding-bottom: 4px;
+  }
+
+  /* === readout strip (centered top) === */
+  .readout {
+    position: fixed;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    display: flex;
+    gap: 22px;
+    padding: 9px 18px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(18px) saturate(1.4);
+    border-radius: 2px;
+  }
+  .readout .item { display: flex; align-items: baseline; gap: 8px; }
+  .readout .item.ctrl {
+    cursor: pointer;
+    padding: 2px 8px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    align-items: center;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .readout .item.ctrl:hover { background: rgba(255,255,255,0.06); border-color: var(--accent); }
+  .readout .item.ctrl .v { color: var(--accent); font-size: 11px; }
+  .readout .k {
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+  .readout .v {
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    min-width: 50px;
+  }
+
+  /* === panels === */
+  .panel {
+    position: relative;
+    background: var(--bg-panel);
+    backdrop-filter: blur(18px) saturate(1.4);
+    -webkit-backdrop-filter: blur(18px) saturate(1.4);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    z-index: 10;
+    overflow: hidden;
+  }
+
+  /* Two fixed full-height columns flanking the canvas. Primary panel on top
+     keeps its natural height; the secondary panel below takes the remaining
+     space and scrolls internally — so nothing ever overlaps and nothing
+     covers the visualization. */
+  .col {
+    position: fixed;
+    top: 90px;
+    bottom: 24px;
+    width: 290px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    z-index: 10;
+    pointer-events: none;  /* let clicks pass through the gaps to the canvas */
+  }
+  .col-left  { left: 24px; }
+  .col-right { right: 24px; }
+  .col .panel { pointer-events: auto; }
+  /* primary panel: natural height, capped, scrolls only if very tall */
+  .col > .panel:first-child { flex: 0 1 auto; max-height: 62%; overflow-y: auto; }
+  /* secondary panel: takes remaining height, scrolls internally */
+  .col > .panel:last-child  { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+  .panel .ph {
+    padding: 10px 14px 8px;
+    border-bottom: 1px solid var(--border);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .panel .ph .ph-tag {
+    font-size: 9px;
+    color: var(--accent);
+    letter-spacing: 0.15em;
+  }
+
+  .panel .pb { padding: 14px; }
+
+  /* left panel: parameters (positioning now handled by .col-left) */
+  .panel-params {
+    width: 100%;
+  }
+  .panel-params::-webkit-scrollbar { width: 6px; }
+  .panel-params::-webkit-scrollbar-track { background: transparent; }
+  .panel-params::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
+
+  .control { margin-bottom: 12px; }
+  .control:last-child { margin-bottom: 0; }
+  .control .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 5px;
+  }
+  .control .lbl {
+    font-size: 11px;
+    color: var(--text);
+    letter-spacing: 0.05em;
+  }
+  .control .val {
+    font-size: 11px;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .control .desc {
+    font-size: 10px;
+    color: var(--text-faint);
+    margin-top: 4px;
+    line-height: 1.5;
+    font-style: italic;
+  }
+
+  .section-head {
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent-warm);
+    margin: 16px 0 8px 0;
+    padding-bottom: 4px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .section-head:first-child { margin-top: 0; }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    background: linear-gradient(90deg, var(--border) 0%, var(--border-bright) 100%);
+    outline: none;
+    cursor: pointer;
+    border-radius: 0;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    background: var(--accent);
+    border: 2px solid var(--bg-deep);
+    border-radius: 0;
+    transform: rotate(45deg);
+    box-shadow: 0 0 10px var(--accent);
+    cursor: grab;
+  }
+  input[type="range"]::-webkit-slider-thumb:active {
+    cursor: grabbing;
+    background: var(--accent-mag);
+    box-shadow: 0 0 14px var(--accent-mag);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: var(--accent);
+    border: 2px solid var(--bg-deep);
+    border-radius: 0;
+    box-shadow: 0 0 10px var(--accent);
+    cursor: grab;
+  }
+
+  .equation {
+    background: rgba(0, 212, 255, 0.04);
+    border-left: 2px solid var(--accent);
+    padding: 10px 12px;
+    margin-bottom: 14px;
+    font-size: 11px;
+    line-height: 1.7;
+    color: var(--text);
+    font-style: italic;
+  }
+  .equation .term {
+    transition: color 0.2s, opacity 0.2s, text-decoration 0.2s;
+    display: inline-block;
+  }
+  .equation .term.killed {
+    color: var(--danger);
+    text-decoration: line-through;
+    opacity: 0.6;
+  }
+  .equation .nope {
+    color: var(--text-faint);
+    text-decoration: line-through;
+    opacity: 0.5;
+  }
+
+  /* integer steppers for quantum numbers */
+  .qint {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .qint button {
+    background: transparent;
+    border: 1px solid var(--border-bright);
+    color: var(--accent);
+    width: 22px;
+    height: 22px;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+  }
+  .qint button:hover {
+    background: var(--accent);
+    color: var(--bg-deep);
+  }
+  .qint button:disabled {
+    color: var(--text-faint);
+    border-color: var(--text-faint);
+    cursor: not-allowed;
+  }
+  .qint button:disabled:hover {
+    background: transparent;
+    color: var(--text-faint);
+  }
+  .qint .qval {
+    flex: 1;
+    text-align: center;
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+  .qint .qlbl {
+    font-size: 10px;
+    color: var(--text-dim);
+    min-width: 14px;
+  }
+
+  /* state badge */
+  .state-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .state-name {
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+  .state-name.b { color: var(--accent-mag); }
+  .state-formula {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-style: italic;
+    margin-top: 2px;
+  }
+
+  /* esa panel */
+  .panel-esa {
+    width: 100%;
+  }
+  .panel-esa::-webkit-scrollbar { width: 6px; }
+  .panel-esa::-webkit-scrollbar-track { background: transparent; }
+  .panel-esa::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
+
+  .esa-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 9px 0;
+    border-bottom: 1px dashed var(--border);
+    cursor: pointer;
+    user-select: none;
+  }
+  .esa-toggle:last-child { border-bottom: none; padding-bottom: 0; }
+  .esa-toggle:first-child { padding-top: 0; }
+  .esa-toggle .box {
+    width: 12px;
+    height: 12px;
+    border: 1px solid var(--border-bright);
+    flex-shrink: 0;
+    margin-top: 2px;
+    position: relative;
+    transition: all 0.15s;
+  }
+  .esa-toggle.active .box {
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+  }
+  .esa-toggle.danger.active .box {
+    background: var(--accent-mag);
+    box-shadow: 0 0 8px var(--accent-mag);
+  }
+  .esa-toggle .lbl-esa {
+    font-size: 11px;
+    color: var(--text);
+    line-height: 1.4;
+  }
+  .esa-toggle .desc-esa {
+    font-size: 10px;
+    color: var(--text-faint);
+    line-height: 1.5;
+    margin-top: 3px;
+    font-style: italic;
+  }
+  .esa-toggle.active .lbl-esa { color: var(--accent); }
+  .esa-toggle.danger.active .lbl-esa { color: var(--accent-mag); }
+</style>
+</head>
+<body>
+  <div id="canvas3d"></div>
+
+  <div class="title-strip">
+    <div class="glyph"><em>ψ</em> Schrödinger</div>
+    <div class="sub">hydrogen-like eigenstates · ESA aligned</div>
+  </div>
+
+  <div class="readout">
+    <div class="item ctrl" id="ro-pause" title="play / pause (space)"><span class="v" id="ro-pause-icon">❚❚</span></div>
+    <div class="item"><span class="k">t</span><span class="v" id="ro-t">0.00</span></div>
+    <div class="item"><span class="k">⟨E⟩</span><span class="v" id="ro-E">−0.500</span></div>
+    <div class="item"><span class="k">⟨r⟩</span><span class="v" id="ro-r">1.50</span></div>
+    <div class="item"><span class="k">‖ψ‖²</span><span class="v" id="ro-norm">1.000</span></div>
+    <div class="item"><span class="k">beat T</span><span class="v" id="ro-beat">—</span></div>
+    <div class="item"><span class="k">regime</span><span class="v" id="ro-regime" style="color:var(--good)">eigenstate</span></div>
+  </div>
+
+    <div class="col col-left">
+<!-- Parameters panel -->
+  <div class="panel panel-params">
+    <div class="ph">
+      <span>parameters</span>
+      <span class="ph-tag">Schrödinger 1926</span>
+    </div>
+    <div class="pb">
+      <div class="equation" id="eq">
+        <div><span class="term" id="t-psi">ψ<sub>nlm</sub>(r,θ,φ,t)</span> = <span class="term" id="t-R">R<sub>nl</sub>(r)</span> · <span class="term" id="t-Y">Y<sub>l</sub><sup>m</sup>(θ,φ)</span> · <span class="term" id="t-phase">e<sup>−iE<sub>n</sub>t</sup></span></div>
+        <div style="margin-top:6px"><span class="term" id="t-Y2">Y<sub>l</sub><sup>m</sup></span> = <span class="term" id="t-leg">P<sub>l</sub><sup>m</sup>(cos θ)</span> · <span class="term" id="t-az">e<sup>imφ</sup></span></div>
+      </div>
+
+      <div class="section-head">State A <span style="color:var(--accent);font-weight:500">(α)</span></div>
+      <div class="state-row">
+        <div class="qint"><span class="qlbl">n</span><button id="An-">−</button><span class="qval" id="An_v">2</span><button id="An+">+</button></div>
+        <div class="qint"><span class="qlbl">l</span><button id="Al-">−</button><span class="qval" id="Al_v">1</span><button id="Al+">+</button></div>
+        <div class="qint"><span class="qlbl">m</span><button id="Am-">−</button><span class="qval" id="Am_v">0</span><button id="Am+">+</button></div>
+      </div>
+      <div class="state-formula" id="A_formula">2p<sub>z</sub> · E = −0.125</div>
+
+      <div class="section-head">State B <span style="color:var(--accent-mag);font-weight:500">(β)</span></div>
+      <div class="state-row">
+        <div class="qint"><span class="qlbl">n</span><button id="Bn-">−</button><span class="qval" id="Bn_v">1</span><button id="Bn+">+</button></div>
+        <div class="qint"><span class="qlbl">l</span><button id="Bl-">−</button><span class="qval" id="Bl_v">0</span><button id="Bl+">+</button></div>
+        <div class="qint"><span class="qlbl">m</span><button id="Bm-">−</button><span class="qval" id="Bm_v">0</span><button id="Bm+">+</button></div>
+      </div>
+      <div class="state-formula" id="B_formula">1s · E = −0.500</div>
+
+      <div class="control" style="margin-top:10px">
+        <div class="row"><span class="lbl">mix β (B amplitude)</span><span class="val" id="mix_v">0.000</span></div>
+        <input type="range" id="mix" min="0" max="1" step="0.005" value="0">
+        <div class="desc">0 → pure A. 0.707 → equal weight (the interference-maximum point).</div>
+      </div>
+      <div class="control">
+        <div class="row"><span class="lbl">phase offset δ</span><span class="val" id="dphi_v">0.00</span></div>
+        <input type="range" id="dphi" min="0" max="6.2832" step="0.01" value="0">
+        <div class="desc">Relative phase β·e<sup>iδ</sup>. Rotates the interference pattern.</div>
+      </div>
+
+      <div class="section-head">Dynamics</div>
+      <div class="control">
+        <div class="row"><span class="lbl">time speed</span><span class="val" id="speed_v">1.0×</span></div>
+        <input type="range" id="speed" min="0" max="3" step="0.05" value="1">
+      </div>
+      <div class="control">
+        <div class="row"><span class="lbl">samples N</span><span class="val" id="N_v">60000</span></div>
+        <input type="range" id="N" min="5000" max="120000" step="1000" value="60000">
+        <div class="desc">Point cloud size. Higher = smoother density at frame-rate cost.</div>
+      </div>
+      <div class="control">
+        <div class="row"><span class="lbl">cloud brightness</span><span class="val" id="bri_v">1.0×</span></div>
+        <input type="range" id="bri" min="0.2" max="4" step="0.05" value="1">
+      </div>
+
+      <div class="btn-row" style="display:flex;gap:6px;margin-top:14px;flex-wrap:wrap">
+        <button class="btn" id="btn-pause">pause</button>
+        <button class="btn" id="btn-reset">reset t</button>
+        <button class="btn" id="btn-focus">focus</button>
+        <button class="btn" id="btn-resample">resample</button>
+      </div>
+
+      <div class="section-head">Presets</div>
+      <div class="preset-grid" id="preset-grid"></div>
+    </div>
+  </div>
+<!-- Diagnostics: spatial/analytical substrates -->
+  <div class="panel panel-diag">
+    <div class="ph">
+      <span>diagnostics</span>
+      <span class="ph-tag">spatial · analytical</span>
+    </div>
+    <div class="diag-grid">
+      <div class="diag-cell"><span class="diag-lbl">|R(r)|²r²</span><canvas id="d-radial"></canvas></div>
+      <div class="diag-cell"><span class="diag-lbl">|Y(θ)|²</span><canvas id="d-angular"></canvas></div>
+      <div class="diag-cell"><span class="diag-lbl">ψ on z=0</span><canvas id="d-slicez"></canvas></div>
+      <div class="diag-cell"><span class="diag-lbl">ψ on y=0</span><canvas id="d-slicey"></canvas></div>
+      <div class="diag-cell"><span class="diag-lbl">arg(ψ) hist</span><canvas id="d-phase"></canvas></div>
+      <div class="diag-cell"><span class="diag-lbl">E ladder</span><canvas id="d-energy"></canvas></div>
+    </div>
+  </div>
+  </div>
+
+  <div class="col col-right">
+<!-- ESA panel -->
+  <div class="panel panel-esa">
+    <div class="ph">
+      <span>esa: constraint toggles</span>
+      <span class="ph-tag">break it to see it</span>
+    </div>
+    <div class="pb">
+      <div class="esa-toggle" id="esa-killR">
+        <div class="box"></div>
+        <div>
+          <div class="lbl-esa">kill R(r) — radial → 1</div>
+          <div class="desc-esa">Radial weight disappears. Orbital de-localizes to whatever sphere the sampling covers. Watch ‖ψ‖² stop being 1.</div>
+        </div>
+      </div>
+      <div class="esa-toggle" id="esa-killY">
+        <div class="box"></div>
+        <div>
+          <div class="lbl-esa">kill Y(θ,φ) — angular → sphere</div>
+          <div class="desc-esa">All angular structure dies. p, d, f orbitals collapse to s-shape. Energy unchanged (E depends only on n).</div>
+        </div>
+      </div>
+      <div class="esa-toggle" id="esa-killAz">
+        <div class="box"></div>
+        <div>
+          <div class="lbl-esa">kill e<sup>imφ</sup> — phase → cos(mφ)</div>
+          <div class="desc-esa">Azimuthal rotation freezes. The state ceases to be an L<sub>z</sub> eigenstate. |ψ|² gains 2m lobes that were hidden.</div>
+        </div>
+      </div>
+      <div class="esa-toggle" id="esa-killTime">
+        <div class="box"></div>
+        <div>
+          <div class="lbl-esa">kill e<sup>−iE<sub>n</sub>t</sup> — freeze phase clock</div>
+          <div class="desc-esa">Single eigenstate: no visible change (good — eigenstates ARE stationary). Superposition: beating stops.</div>
+        </div>
+      </div>
+      <div class="esa-toggle danger" id="esa-falstad">
+        <div class="box"></div>
+        <div>
+          <div class="lbl-esa">|ψ|² mode — discard phase</div>
+          <div class="desc-esa">The Falstad floor. Phase channel severed; cloud color collapses. This is what every conventional viewer shows you.</div>
+        </div>
+      </div>
+      <div class="esa-toggle" id="esa-decohere">
+        <div class="box"></div>
+        <div>
+          <div class="lbl-esa">kill superposition coupling</div>
+          <div class="desc-esa">Draw α-state and β-state as classical mixture, not coherent sum. Interference fringe vanishes; beating stops.</div>
+        </div>
+      </div>
+      <div class="esa-toggle" id="esa-nodes">
+        <div class="box"></div>
+        <div>
+          <div class="lbl-esa">show nodal surfaces</div>
+          <div class="desc-esa">Highlight where Re(ψ) = 0 AND Im(ψ) = 0. Predicted node count: n − 1 (l angular + n−l−1 radial).</div>
+        </div>
+      </div>
+      <div class="esa-toggle" id="esa-bohr">
+        <div class="box"></div>
+        <div>
+          <div class="lbl-esa">show Bohr radius marker</div>
+          <div class="desc-esa">Translucent wire-sphere at r = n²·a₀. The classical-prediction baseline.</div>
+        </div>
+      </div>
+      <div class="esa-toggle" id="esa-reveal">
+        <div class="box"></div>
+        <div>
+          <div class="lbl-esa">Reveal — the phase clock, running</div>
+          <div class="desc-esa">The coherent evolution measurement destroys — visible only while the box stays closed. A heartbeat sweeps the fixed cloud: rate = |E_n| (1s fastest), arms = |m|, handedness = sign(m), fixed in space no matter how you look. Off = |ψ|² is stationary (that's the lesson).</div>
+          <div class="control" style="margin-top:8px">
+            <div class="row"><span class="lbl" style="font-size:10px">pace</span><span class="val" id="pace_v">1.0×</span></div>
+            <input type="range" id="pace" min="0.1" max="8" step="0.1" value="1">
+            <div class="desc">1.0× = literal E_n. Higher scales the heartbeat into a legible range without changing which states beat faster.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+<!-- State selector panel -->
+  <div class="panel panel-orb">
+    <div class="ph">
+      <span>state selector</span>
+      <span class="ph-tag">click A · shift+click B</span>
+    </div>
+    <div class="orb-wrap">
+      <table class="orb-table" id="orb-table"></table>
+      <div class="orb-meta">
+        <span id="orb-A-readout" style="color:var(--accent)">A: 2p (l=1, m=0)</span>
+        <span id="orb-B-readout" style="color:var(--accent-mag)">B: 1s (l=0, m=0)</span>
+      </div>
+    </div>
+  </div>
+  </div>
+
+<div class="legend">
+    <span class="item"><span class="swatch sw-h"></span><span class="l">hue = arg(ψ)</span></span>
+    <span class="item"><span class="swatch sw-a"></span><span class="l">opacity = |ψ|</span></span>
+    <span class="item"><span class="swatch sw-c"></span><span class="l">cyan = state A · magenta = state B</span></span>
+  </div>
+
+  <div class="footnote">Schrödinger ψ-Explorer · hydrogen-like eigenstates ψ_nlm(r,θ,φ,t) · atomic units (ℏ=m=e=a₀=1) · phase preserved</div>
+
+<style>
+  /* === diagnostics panel (bottom-left) === */
+  .panel-diag {
+    width: 100%;
+  }
+  .diag-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+    padding: 10px;
+  }
+  .diag-cell {
+    aspect-ratio: 1;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+  .diag-cell canvas { width: 100%; height: 100%; display: block; }
+  .diag-cell .diag-lbl {
+    position: absolute;
+    top: 4px; left: 6px;
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    pointer-events: none;
+    text-shadow: 0 0 4px rgba(0,0,0,0.8);
+  }
+
+  /* === orbital chooser panel (bottom-right) === */
+  .panel-orb {
+    width: 100%;
+  }
+  .orb-wrap { padding: 12px; }
+  .orb-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 10px;
+  }
+  .orb-table th {
+    font-weight: 400;
+    font-size: 9px;
+    color: var(--text-faint);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 4px 2px;
+  }
+  .orb-table td { padding: 2px; }
+  .orb-cell {
+    width: 100%;
+    aspect-ratio: 1;
+    background: rgba(0, 212, 255, 0.04);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: var(--text-dim);
+    transition: all 0.12s;
+    user-select: none;
+  }
+  .orb-cell:hover {
+    background: rgba(0, 212, 255, 0.15);
+    color: var(--text);
+    border-color: var(--border-bright);
+  }
+  .orb-cell.empty {
+    background: transparent;
+    border: 1px dashed rgba(255,255,255,0.05);
+    cursor: not-allowed;
+    color: var(--text-faint);
+    opacity: 0.3;
+  }
+  .orb-cell.empty:hover {
+    background: transparent;
+    color: var(--text-faint);
+  }
+  .orb-cell.is-A {
+    background: var(--accent);
+    color: var(--bg-deep);
+    border-color: var(--accent);
+    box-shadow: 0 0 10px rgba(0,212,255,0.55);
+    font-weight: 600;
+  }
+  .orb-cell.is-B {
+    background: var(--accent-mag);
+    color: var(--bg-deep);
+    border-color: var(--accent-mag);
+    box-shadow: 0 0 10px rgba(255,45,149,0.55);
+    font-weight: 600;
+  }
+  .orb-cell.is-both {
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent) 50%, var(--accent-mag) 50%, var(--accent-mag) 100%);
+    color: var(--bg-deep);
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  .orb-meta {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 10px;
+  }
+
+  /* === m-picker row (per-cell sub-selector) === */
+  .m-picker {
+    display: flex;
+    gap: 2px;
+    justify-content: center;
+    flex-wrap: wrap;
+    padding: 1px;
+  }
+  .m-pick {
+    width: 11px;
+    height: 11px;
+    background: rgba(0,212,255,0.1);
+    cursor: pointer;
+    display: inline-block;
+  }
+  .m-pick:hover { background: var(--border-bright); }
+  .m-pick.active-A { background: var(--accent); box-shadow: 0 0 4px var(--accent); }
+  .m-pick.active-B { background: var(--accent-mag); box-shadow: 0 0 4px var(--accent-mag); }
+  .m-pick.active-both { background: linear-gradient(135deg, var(--accent) 50%, var(--accent-mag) 50%); }
+
+  /* === buttons === */
+  .btn {
+    background: transparent;
+    border: 1px solid var(--border-bright);
+    color: var(--accent);
+    padding: 6px 10px;
+    font-family: inherit;
+    font-size: 9.5px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s;
+    flex: 1;
+    min-width: 60px;
+  }
+  .btn:hover {
+    background: var(--accent);
+    color: var(--bg-deep);
+    box-shadow: 0 0 12px rgba(0, 212, 255, 0.5);
+  }
+  .btn.active {
+    background: var(--accent);
+    color: var(--bg-deep);
+  }
+
+  /* === preset grid === */
+  .preset-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+  }
+  .preset-btn {
+    background: rgba(0,212,255,0.04);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 6px 4px;
+    font-family: inherit;
+    font-size: 9.5px;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: left;
+  }
+  .preset-btn:hover {
+    background: rgba(0,212,255,0.12);
+    color: var(--text);
+    border-color: var(--border-bright);
+  }
+  .preset-btn .pt {
+    display: block;
+    color: var(--accent);
+    font-size: 10px;
+    margin-bottom: 1px;
+  }
+
+  /* === legend === */
+  .legend {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 4;
+    display: flex;
+    gap: 18px;
+    font-size: 10px;
+    pointer-events: none;
+  }
+  .legend .swatch {
+    display: inline-block;
+    width: 22px;
+    height: 4px;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .legend .sw-h {
+    background: linear-gradient(90deg, #ff2d95, #ffb84d, #3dff8a, #00d4ff, #b864ff, #ff2d95);
+  }
+  .legend .sw-a {
+    background: linear-gradient(90deg, transparent, var(--accent));
+  }
+  .legend .sw-c {
+    background: linear-gradient(90deg, var(--accent) 50%, var(--accent-mag) 50%);
+  }
+  .legend .item { color: var(--text-dim); }
+  .legend .item .l { color: var(--text); }
+
+  /* === footnote === */
+  .footnote {
+    position: fixed;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 4;
+    font-size: 9px;
+    color: var(--text-faint);
+    letter-spacing: 0.08em;
+    pointer-events: none;
+  }
+
+  /* === responsive === */
+  @media (max-width: 1300px) {
+    .panel-diag { width: 320px; }
+    .panel-orb { width: 250px; }
+  }
+  @media (max-width: 1100px) {
+    .panel { width: 240px !important; }
+    .legend { display: none; }
+  }
+  @media (max-width: 800px) {
+    .panel-params, .panel-esa { top: 70px; }
+    .panel-diag, .panel-orb { display: none; }
+    .title-strip .glyph { font-size: 28px; }
+    .readout { gap: 12px; padding: 6px 10px; }
+    .readout .v { font-size: 11px; }
+  }
+</style>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+/* ============================================================
+   SCHRÖDINGER ψ-EXPLORER
+   Hydrogen-like eigenstates with full complex ψ preserved.
+   ESA-aligned: every multiplicative factor of ψ is independently killable.
+   See theory.md for strip predictions.
+   ============================================================ */
+
+// ---------- state ----------
+const state = {
+  // State A
+  An: 2, Al: 1, Am: 0,
+  // State B (for superposition)
+  Bn: 1, Bl: 0, Bm: 0,
+  // Mixing
+  mix: 0.0,          // β amplitude; α = sqrt(1 - β²)
+  dphi: 0.0,         // relative phase offset δ
+  // Dynamics
+  speed: 1.0,
+  paused: false,
+  t: 0.0,
+  bri: 1.0,          // brightness multiplier
+  N: 60000,          // sample count
+  // ESA toggles
+  killR: false,
+  killY: false,
+  killAz: false,
+  killTime: false,
+  falstad: false,    // |ψ|² mode — discard phase
+  decohere: false,   // kill superposition coupling
+  showNodes: false,
+  showBohr: false,
+  reveal: false,    // phase-front 'Reveal' layer: comet sweep tracking constant-arg(psi)
+  pace: 1.0,        // perceptual pace multiplier on literal E_n heartbeat
+  // misc
+  resampleRequested: true,
+};
+
+// ---------- atomic-units constants ----------
+const A0 = 1.0; // Bohr radius
+function E_n(n) { return -0.5 / (n * n); }   // hydrogen energy (atomic units)
+
+// derived helpers
+function isValidQN(n, l, m) {
+  if (!Number.isInteger(n) || n < 1) return false;
+  if (!Number.isInteger(l) || l < 0 || l >= n) return false;
+  if (!Number.isInteger(m) || Math.abs(m) > l) return false;
+  return true;
+}
+
+// ============================================================
+// MATH PRIMITIVES
+// ============================================================
+
+// memoized factorial
+const _fact_cache = [1, 1];
+function factorial(n) {
+  if (n < 0) return NaN;
+  if (n < _fact_cache.length) return _fact_cache[n];
+  for (let i = _fact_cache.length; i <= n; i++) {
+    _fact_cache[i] = _fact_cache[i-1] * i;
+  }
+  return _fact_cache[n];
+}
+
+// Generalized Laguerre polynomial L^α_k(x) using stable forward recursion
+//   L^α_0(x) = 1
+//   L^α_1(x) = 1 + α - x
+//   L^α_{k+1}(x) = ((2k+1+α-x) L^α_k(x) - (k+α) L^α_{k-1}(x)) / (k+1)
+function laguerre(k, alpha, x) {
+  if (k < 0) return 0;
+  if (k === 0) return 1;
+  let Lm1 = 1;             // L_0
+  let L   = 1 + alpha - x; // L_1
+  if (k === 1) return L;
+  for (let j = 1; j < k; j++) {
+    const Lp1 = ((2*j + 1 + alpha - x) * L - (j + alpha) * Lm1) / (j + 1);
+    Lm1 = L;
+    L = Lp1;
+  }
+  return L;
+}
+
+// Associated Legendre polynomial P_l^m(x) for |x| ≤ 1, m ≥ 0, l ≥ m
+// Standard Numerical Recipes recursion; no Condon-Shortley sign convention applied here
+// (we apply (-1)^m via the spherical-harmonic normalization separately if desired —
+//  but using the convention P_l^m(x) = (1-x²)^(m/2) d^m P_l(x) / dx^m which absorbs sign).
+function legendreP(l, m, x) {
+  if (m < 0) return NaN;
+  if (l < m) return 0;
+
+  // Start with P_m^m(x) = (-1)^m (2m-1)!! (1-x²)^(m/2)
+  let pmm = 1.0;
+  if (m > 0) {
+    const somx2 = Math.sqrt(Math.max(0, 1 - x*x));
+    let fact = 1.0;
+    for (let i = 1; i <= m; i++) {
+      pmm *= -fact * somx2;
+      fact += 2.0;
+    }
+  }
+  if (l === m) return pmm;
+
+  // P_{m+1}^m(x) = x (2m+1) P_m^m(x)
+  let pmmp1 = x * (2*m + 1) * pmm;
+  if (l === m + 1) return pmmp1;
+
+  // Forward recursion to P_l^m(x)
+  let pll = 0;
+  for (let ll = m + 2; ll <= l; ll++) {
+    pll = (x * (2*ll - 1) * pmmp1 - (ll + m - 1) * pmm) / (ll - m);
+    pmm = pmmp1;
+    pmmp1 = pll;
+  }
+  return pll;
+}
+
+// Spherical harmonic Y_l^m(θ,φ) — REAL part and IMAG part returned separately
+// Y_l^m = N_lm · P_l^|m|(cosθ) · e^(imφ),  with sign (-1)^m absorbed into normalization for m>0
+// We use the standard physicists' convention:
+//   Y_l^m(θ,φ) = sqrt((2l+1)/(4π) · (l-|m|)!/(l+|m|)!) · P_l^|m|(cosθ) · e^(imφ),  (-1)^m for m>0
+// Returns [re, im] (or sets out array if provided to avoid allocation)
+function sphericalHarmonic(l, m, cosTheta, phi, out) {
+  const am = Math.abs(m);
+  // normalization, including Condon-Shortley sign for m > 0
+  const norm_sq = (2*l + 1) / (4 * Math.PI) * factorial(l - am) / factorial(l + am);
+  let norm = Math.sqrt(norm_sq);
+  if (m > 0 && (m & 1) === 1) norm = -norm; // Condon-Shortley (-1)^m for m>0
+  const P = legendreP(l, am, cosTheta);
+  const radial = norm * P;
+  const re = radial * Math.cos(m * phi);
+  const im = radial * Math.sin(m * phi);
+  if (out) { out[0] = re; out[1] = im; return out; }
+  return [re, im];
+}
+
+// Radial function R_nl(r) for hydrogen (Z=1, atomic units)
+// R_nl(r) = sqrt[(2/n)^3 · (n-l-1)! / (2n (n+l)!)] · (2r/n)^l · L^{2l+1}_{n-l-1}(2r/n) · exp(-r/n)
+function radialR(n, l, r) {
+  const rho = 2 * r / n;
+  const pref_norm_sq = Math.pow(2/n, 3) * factorial(n - l - 1) / (2 * n * factorial(n + l));
+  const pref = Math.sqrt(pref_norm_sq);
+  const poly = laguerre(n - l - 1, 2*l + 1, rho);
+  return pref * Math.pow(rho, l) * poly * Math.exp(-rho / 2);
+}
+
+// ⟨r⟩ for hydrogen eigenstate: ⟨r⟩ = (n²/Z) [1 + 0.5(1 - l(l+1)/n²)] = a₀(3n² - l(l+1))/(2Z)
+function expectedR(n, l) {
+  return (3 * n * n - l * (l + 1)) / 2.0;
+}
+
+// ============================================================
+// FULL WAVEFUNCTION ψ(x,y,z,t) — returns complex via [re, im]
+// Honors all ESA toggles.
+// ============================================================
+const _Y_tmp = [0, 0];
+
+function psiEigenstate(n, l, m, x, y, z, t, kill) {
+  // kill is an object with flags: killR, killY, killAz, killTime
+  const r = Math.sqrt(x*x + y*y + z*z);
+  // R component
+  let R = kill.killR ? 1.0 : radialR(n, l, r);
+  // Y component
+  let Yre, Yim;
+  if (kill.killY) {
+    Yre = 1.0 / Math.sqrt(4 * Math.PI);
+    Yim = 0;
+  } else {
+    const cosTheta = (r > 1e-9) ? (z / r) : 1.0;
+    const phi = Math.atan2(y, x);
+    if (kill.killAz) {
+      // Replace e^(imφ) with cos(mφ): real-valued standing wave
+      const am = Math.abs(m);
+      const norm_sq = (2*l + 1) / (4 * Math.PI) * factorial(l - am) / factorial(l + am);
+      let norm = Math.sqrt(norm_sq);
+      if (m > 0 && (m & 1) === 1) norm = -norm;
+      const P = legendreP(l, am, cosTheta);
+      Yre = norm * P * Math.cos(m * phi);
+      Yim = 0;
+    } else {
+      sphericalHarmonic(l, m, cosTheta, phi, _Y_tmp);
+      Yre = _Y_tmp[0];
+      Yim = _Y_tmp[1];
+    }
+  }
+  // multiply R and Y
+  let re = R * Yre;
+  let im = R * Yim;
+  // Time phase
+  if (!kill.killTime) {
+    const omega = E_n(n);  // E = ω in atomic units (ℏ=1)
+    const cT = Math.cos(omega * t);
+    const sT = Math.sin(-omega * t);  // e^(-iEt)
+    const nre = re * cT - im * sT;
+    const nim = re * sT + im * cT;
+    re = nre; im = nim;
+  }
+  return [re, im];
+}
+
+// Composite ψ = α·ψ_A + β·e^(iδ)·ψ_B
+// If decohere, return [|α·ψ_A|² + |β·ψ_B|², 0] (loses phase entirely, used as |ψ|² scalar)
+// If falstad (in render loop, not here), the rendering pipeline discards arg(ψ) on output.
+const _A_tmp = [0, 0];
+const _B_tmp = [0, 0];
+
+function psiTotal(x, y, z, t, out) {
+  const alpha = Math.sqrt(Math.max(0, 1 - state.mix * state.mix));
+  const beta = state.mix;
+  const kill = {
+    killR: state.killR, killY: state.killY,
+    killAz: state.killAz, killTime: state.killTime,
+  };
+  const arrA = psiEigenstate(state.An, state.Al, state.Am, x, y, z, t, kill);
+  _A_tmp[0] = arrA[0]; _A_tmp[1] = arrA[1];
+  if (beta > 1e-6) {
+    const arrB = psiEigenstate(state.Bn, state.Bl, state.Bm, x, y, z, t, kill);
+    _B_tmp[0] = arrB[0]; _B_tmp[1] = arrB[1];
+  } else {
+    _B_tmp[0] = 0; _B_tmp[1] = 0;
+  }
+
+  if (state.decohere && beta > 1e-6) {
+    // Classical mixture (Strip G): density is the weighted sum of the two
+    // component densities, with NO cross term and NO phase. A statistical
+    // mixture has no global phase to display — so we return a real, positive
+    // amplitude whose square is the mixture density and zero imaginary part.
+    // The render path forces the grey |ψ|² look while decohere is active, so
+    // arg(ψ)=0 here never gets mistaken for a meaningful phase.
+    const dA = (_A_tmp[0]*_A_tmp[0] + _A_tmp[1]*_A_tmp[1]) * alpha*alpha;
+    const dB = (_B_tmp[0]*_B_tmp[0] + _B_tmp[1]*_B_tmp[1]) * beta*beta;
+    out[0] = Math.sqrt(dA + dB);  // |amplitude| with phase discarded
+    out[1] = 0;
+    return;
+  }
+
+  // Coherent superposition: ψ = α·ψ_A + β·e^(iδ)·ψ_B
+  const cd = Math.cos(state.dphi);
+  const sd = Math.sin(state.dphi);
+  const Bre_rot = _B_tmp[0] * cd - _B_tmp[1] * sd;
+  const Bim_rot = _B_tmp[0] * sd + _B_tmp[1] * cd;
+  out[0] = alpha * _A_tmp[0] + beta * Bre_rot;
+  out[1] = alpha * _A_tmp[1] + beta * Bim_rot;
+}
+
+// ============================================================
+// THREE.JS SETUP
+// ============================================================
+const container = document.getElementById('canvas3d');
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x06060d, 0.008);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000);
+camera.position.set(22, 14, 26);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x06060d, 1);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+container.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.target.set(0, 0, 0);
+controls.update();
+
+// post-processing
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  0.55, 0.40, 0.22  // strength, radius, threshold — higher threshold so only the
+                    // brightest crests bloom; dense core keeps its hue instead of
+                    // washing to white. Reveal crests are what flare, transiently.
+);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+// faint axes
+function makeAxis(dir, color, len = 8) {
+  const geo = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0,0,0),
+    dir.clone().multiplyScalar(len)
+  ]);
+  const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.18 });
+  return new THREE.Line(geo, mat);
+}
+scene.add(makeAxis(new THREE.Vector3(1,0,0), 0x335566));
+scene.add(makeAxis(new THREE.Vector3(0,1,0), 0x335566));
+scene.add(makeAxis(new THREE.Vector3(0,0,1), 0x66aabb)); // z-axis slightly brighter — quantization axis
+
+// Bohr radius wire sphere (toggled by ESA)
+const bohrGeo = new THREE.SphereGeometry(1, 32, 16);
+const bohrMat = new THREE.MeshBasicMaterial({
+  color: 0xffb84d, wireframe: true, transparent: true, opacity: 0.18
+});
+const bohrSphere = new THREE.Mesh(bohrGeo, bohrMat);
+bohrSphere.visible = false;
+scene.add(bohrSphere);
+
+// ============================================================
+// POINT CLOUD — the substrate of sample positions
+// ============================================================
+
+// Each sample is a fixed (x,y,z). Per frame we compute ψ at that point
+// and write amplitude + phase into per-vertex attributes.
+// The shader maps phase → hue, amplitude → opacity (and slight size scale).
+
+const pointVertShader = `
+  attribute float amp;       // |ψ|, normalized to [0, ~1]
+  attribute float phase;     // arg(ψ), in [-π, π]
+  attribute float nodeFlag;  // 0 = normal, 1 = on nodal surface
+  uniform float uPixelRatio;
+  uniform float uPointSize;
+  uniform float uBri;
+  uniform float uFalstadMode;  // 0 = use phase, 1 = monochrome from |ψ|²
+  uniform float uShowNodes;
+  uniform float uReveal;       // 0 = off, 1 = phase-front Reveal layer active
+  uniform float uSweep;        // current sweep reference phase θ_sweep, in radians
+  varying float vAmp;
+  varying float vPhase;
+  varying float vNodeFlag;
+  varying float vFalstad;
+  varying float vShowNodes;
+  varying float vReveal;
+  varying float vSweep;
+  void main() {
+    vAmp = amp;
+    vPhase = phase;
+    vNodeFlag = nodeFlag;
+    vFalstad = uFalstadMode;
+    vShowNodes = uShowNodes;
+    vReveal = uReveal;
+    vSweep = uSweep;
+    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    // size scales mildly with amplitude so dense regions look denser
+    float sz = uPointSize * (0.5 + 0.7 * clamp(amp * uBri, 0.0, 1.5));
+    if (uShowNodes > 0.5 && nodeFlag > 0.5) sz *= 2.0;
+    // Reveal: points the phase front is passing swell slightly (transient, not net)
+    if (uReveal > 0.5 && uFalstadMode < 0.5) {
+      float dp = phase - uSweep;
+      dp = atan(sin(dp), cos(dp));            // wrap to [-π, π]
+      float crest = exp(-(dp*dp) / 0.20);     // narrow crest at the front
+      sz *= (1.0 + 0.6 * crest);
+    }
+    gl_PointSize = sz * uPixelRatio * (300.0 / -mvPosition.z);
+    gl_Position = projectionMatrix * mvPosition;
+  }
+`;
+
+const pointFragShader = `
+  precision highp float;
+  varying float vAmp;
+  varying float vPhase;
+  varying float vNodeFlag;
+  varying float vFalstad;
+  varying float vShowNodes;
+  varying float vReveal;
+  varying float vSweep;
+  uniform float uBri;
+
+  // HSL → RGB
+  vec3 hsl2rgb(vec3 c) {
+    vec3 rgb = clamp(abs(mod(c.x * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
+    return c.z + c.y * (rgb - 0.5) * (1.0 - abs(2.0 * c.z - 1.0));
+  }
+
+  void main() {
+    // round-point alpha falloff
+    vec2 d = gl_PointCoord - vec2(0.5);
+    float r2 = dot(d, d);
+    if (r2 > 0.25) discard;
+    float falloff = 1.0 - smoothstep(0.0, 0.25, r2);
+
+    float amp = clamp(vAmp * uBri, 0.0, 2.0);
+    if (amp < 0.005) discard;
+
+    vec3 color;
+    if (vFalstad > 0.5) {
+      // |ψ|² mode (or classical mixture) — pure brightness, no hue. Cool gray-blue.
+      float lum = clamp(amp * 1.2, 0.0, 1.0);
+      color = vec3(0.55, 0.72, 0.85) * lum + vec3(0.05, 0.10, 0.15) * lum * 0.3;
+    } else {
+      // phase → hue.  Map [-π, π] → [0, 1] hue wheel
+      float hue = (vPhase + 3.14159265) / 6.28318530;
+      float light = clamp(0.30 + 0.45 * amp, 0.0, 0.95);
+      float sat = 0.95;
+
+      // ---- Reveal: phase-front comet ----
+      // The front lives in world-space phase (vSweep), never in camera space —
+      // so its handedness/arm-count are observer-independent by construction.
+      // Saturation spikes sharply AT the front (true hue); brightness trails
+      // BEHIND it and decays slower → a colored crest with a fading wake.
+      if (vReveal > 0.5) {
+        float dp = vPhase - vSweep;
+        dp = atan(sin(dp), cos(dp));          // wrap to [-π, π]; >0 = ahead, <0 = just passed
+        float crestSat = exp(-(dp*dp) / 0.10); // narrow: saturation fades fast
+        // one-sided wake: only points the front already passed (dp<0) keep glowing
+        float behind = step(dp, 0.0);
+        float wake = behind * exp(dp / 0.9);   // wide, slow decay behind the front
+        // saturation pops at the crest, brightness lingers in the wake
+        sat   = clamp(sat + 0.05 * crestSat, 0.0, 1.0);
+        light = clamp(light + 0.40 * crestSat + 0.22 * wake, 0.0, 1.0);
+      }
+
+      color = hsl2rgb(vec3(hue, sat, light));
+    }
+
+    // Nodal surface highlight
+    if (vShowNodes > 0.5 && vNodeFlag > 0.5) {
+      color = mix(color, vec3(1.0, 0.95, 0.4), 0.7);
+    }
+
+    // Alpha: gentler core gain than before so dense regions keep their hue
+    // instead of additive-blooming to white. You can zoom into the core and
+    // still resolve individual colored points.
+    float alpha = falloff * clamp(0.35 + amp * 0.85, 0.0, 1.0);
+    gl_FragColor = vec4(color, alpha);
+  }
+`;
+
+const pointUniforms = {
+  uPixelRatio: { value: renderer.getPixelRatio() },
+  uPointSize: { value: 2.6 },
+  uBri: { value: 1.0 },
+  uFalstadMode: { value: 0.0 },
+  uShowNodes: { value: 0.0 },
+  uReveal: { value: 0.0 },
+  uSweep: { value: 0.0 },
+};
+
+const pointMaterial = new THREE.ShaderMaterial({
+  uniforms: pointUniforms,
+  vertexShader: pointVertShader,
+  fragmentShader: pointFragShader,
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+});
+
+let cloudGeometry = null;
+let cloud = null;
+let posArr = null;    // Float32Array of 3*N positions
+let ampArr = null;    // Float32Array of N
+let phaseArr = null;  // Float32Array of N
+let nodeArr = null;   // Float32Array of N (0 or 1)
+
+// ============================================================
+// SAMPLING — distribute N points in a ball, biased radially
+// ============================================================
+function resampleCloud(N) {
+  state.N = N;
+  if (cloud) {
+    scene.remove(cloud);
+    cloudGeometry.dispose();
+  }
+  posArr = new Float32Array(N * 3);
+  ampArr = new Float32Array(N);
+  phaseArr = new Float32Array(N);
+  nodeArr = new Float32Array(N);
+
+  // Choose sampling radius based on max relevant state: ~3 * largest n²
+  const nMax = Math.max(state.An, state.Bn);
+  const Rmax = Math.max(8, 3.2 * nMax * nMax);
+
+  // Bias: r ~ sqrt(uniform) gives uniform density in 2D-disk projection,
+  // but for 3D we want more central density. Use power law: r ~ u^0.5 gives r ∝ √u so
+  // dN/dr ∝ r in 3D shell with r² dV → density goes like 1/r. That's a good compromise:
+  // dense near nucleus, sparse outside.
+  for (let i = 0; i < N; i++) {
+    // Marsaglia random unit-vector
+    let ux, uy, uz, s;
+    do {
+      ux = Math.random() * 2 - 1;
+      uy = Math.random() * 2 - 1;
+      s = ux*ux + uy*uy;
+    } while (s >= 1 || s === 0);
+    const f = Math.sqrt(1 - s);
+    uz = 1 - 2 * s;
+    const dx = 2 * ux * f;
+    const dy = 2 * uy * f;
+    // r distribution: r = Rmax * u^0.5 (u uniform)
+    const u = Math.random();
+    const r = Rmax * Math.sqrt(u);
+    posArr[3*i+0] = r * dx;
+    posArr[3*i+1] = r * dy;
+    posArr[3*i+2] = r * uz;
+  }
+
+  cloudGeometry = new THREE.BufferGeometry();
+  cloudGeometry.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+  cloudGeometry.setAttribute('amp', new THREE.BufferAttribute(ampArr, 1));
+  cloudGeometry.setAttribute('phase', new THREE.BufferAttribute(phaseArr, 1));
+  cloudGeometry.setAttribute('nodeFlag', new THREE.BufferAttribute(nodeArr, 1));
+  cloud = new THREE.Points(cloudGeometry, pointMaterial);
+  scene.add(cloud);
+  state.resampleRequested = false;
+}
+
+// ============================================================
+// PER-FRAME ψ EVALUATION at every sample point
+// ============================================================
+const _psi = [0, 0];
+let _lastNormSq = 1.0;
+let _lastMaxAmp = 1.0;
+
+function updateCloud() {
+  const N = state.N;
+  if (!cloudGeometry) return;
+  const t = state.t;
+  let maxAmp2 = 0;
+  let sumAmp2 = 0;
+  // pass 1: compute |ψ|² and phase, find max
+  for (let i = 0; i < N; i++) {
+    const x = posArr[3*i+0];
+    const y = posArr[3*i+1];
+    const z = posArr[3*i+2];
+    psiTotal(x, y, z, t, _psi);
+    const re = _psi[0], im = _psi[1];
+    const a2 = re*re + im*im;
+    if (a2 > maxAmp2) maxAmp2 = a2;
+    sumAmp2 += a2;
+    ampArr[i] = a2;                     // store |ψ|² temporarily
+    phaseArr[i] = Math.atan2(im, re);
+  }
+  _lastMaxAmp = Math.sqrt(maxAmp2);
+
+  // Compute volume element estimate for normalization:
+  // Sample points are within ball of radius Rmax with density ∝ 1/r.
+  // ∫|ψ|² dV ≈ (V_ball / N) * Σ |ψ|²(x_i) * jacobian_correction
+  // For uniform-in-ball: dV_per_sample = (4/3 π Rmax³) / N
+  // For r ~ √u sampling: density of samples ∝ 1/r, so dV_per_sample at radius r:
+  //   number of samples in shell dr = N * (2r/Rmax²) dr
+  //   volume of shell = 4π r² dr
+  //   dV/sample = 4π r² dr / (N * 2r/Rmax² dr) = 2π Rmax² r / N
+  // So normalization sum = Σ |ψ|²(x_i) * 2π Rmax² r_i / N
+  const nMax = Math.max(state.An, state.Bn);
+  const Rmax = Math.max(8, 3.2 * nMax * nMax);
+  let norm = 0;
+  for (let i = 0; i < N; i++) {
+    const x = posArr[3*i], y = posArr[3*i+1], z = posArr[3*i+2];
+    const r = Math.sqrt(x*x + y*y + z*z);
+    norm += ampArr[i] * (2 * Math.PI * Rmax * Rmax * r) / N;
+  }
+  _lastNormSq = norm;
+
+  // pass 2: rescale ampArr to |ψ| (sqrt) and normalize to [0,1] for shader
+  const norm_amp = (_lastMaxAmp > 1e-9) ? (1.0 / _lastMaxAmp) : 1.0;
+  // Nodal-flag threshold: if |ψ|/max < 0.03, it's a node candidate
+  const NODE_THRESH = 0.03;
+  for (let i = 0; i < N; i++) {
+    const aMag = Math.sqrt(ampArr[i]);
+    ampArr[i] = aMag * norm_amp;
+    nodeArr[i] = (ampArr[i] < NODE_THRESH) ? 1 : 0;
+  }
+
+  cloudGeometry.attributes.amp.needsUpdate = true;
+  cloudGeometry.attributes.phase.needsUpdate = true;
+  cloudGeometry.attributes.nodeFlag.needsUpdate = true;
+}
+
+// ============================================================
+// EXPECTATION VALUES (for readout)
+// ============================================================
+function computeExpectations() {
+  // ⟨E⟩ from formula: for superposition α A + β B with E_A, E_B:
+  // ⟨H⟩ = α² E_A + β² E_B   (in atomic units; orbitals are orthogonal if states differ)
+  const alpha = Math.sqrt(Math.max(0, 1 - state.mix * state.mix));
+  const beta = state.mix;
+  const EA = E_n(state.An);
+  const EB = E_n(state.Bn);
+  const E = alpha*alpha * EA + beta*beta * EB;
+
+  // ⟨r⟩ analytically for each state
+  const rA = expectedR(state.An, state.Al);
+  const rB = expectedR(state.Bn, state.Bl);
+  // For a pure superposition, ⟨r⟩ involves cross term ⟨ψ_A | r | ψ_B⟩ which is non-trivial.
+  // We use the weighted average as a usable approximation. The displayed value is labeled as estimate.
+  const r = alpha*alpha * rA + beta*beta * rB;
+
+  // Beat period if both states have nonzero amplitude
+  let beatT = null;
+  if (beta > 0.01 && Math.abs(EA - EB) > 1e-8) {
+    beatT = Math.abs(2 * Math.PI / (EA - EB));
+  }
+
+  return { E, r, beatT };
+}
+
+// ============================================================
+// DIAGNOSTICS — six analytical substrates
+// ============================================================
+const DIAG_BG = '#0a0d18';
+const DIAG_GRID = '#1a2030';
+const DIAG_AXIS = '#2a3548';
+const DIAG_INK = '#7a8095';
+const DIAG_ACC = '#00d4ff';
+const DIAG_MAG = '#ff2d95';
+const DIAG_WARM = '#ffb84d';
+
+function setupDiagCanvas(id) {
+  const c = document.getElementById(id);
+  if (!c) return null;
+  const r = c.getBoundingClientRect();
+  c.width = Math.max(1, Math.floor(r.width * window.devicePixelRatio));
+  c.height = Math.max(1, Math.floor(r.height * window.devicePixelRatio));
+  const ctx = c.getContext('2d');
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  return { canvas: c, ctx, w: r.width, h: r.height };
+}
+
+let diags = {};
+function initDiagnostics() {
+  diags = {
+    radial:  setupDiagCanvas('d-radial'),
+    angular: setupDiagCanvas('d-angular'),
+    slicez:  setupDiagCanvas('d-slicez'),
+    slicey:  setupDiagCanvas('d-slicey'),
+    phase:   setupDiagCanvas('d-phase'),
+    energy:  setupDiagCanvas('d-energy'),
+  };
+}
+
+// HSL-from-phase utility (mirrors shader)
+function phaseToColor(phase, amp) {
+  const hue = ((phase + Math.PI) / (2 * Math.PI)) * 360;
+  const light = Math.max(15, Math.min(70, 30 + 40 * amp));
+  return `hsl(${hue.toFixed(0)}, 90%, ${light.toFixed(0)}%)`;
+}
+
+// 1) Radial probability density: |R(r)|² · r² vs r
+//    For the superposed state, plot both A and B (and the cross term if requested)
+function drawRadial() {
+  const d = diags.radial; if (!d) return;
+  const { ctx, w, h } = d;
+  ctx.fillStyle = DIAG_BG;
+  ctx.fillRect(0, 0, w, h);
+
+  const padL = 22, padR = 6, padT = 8, padB = 14;
+  const innerW = w - padL - padR;
+  const innerH = h - padT - padB;
+
+  const nMax = Math.max(state.An, state.Bn);
+  const rMax = 3.2 * nMax * nMax;
+  const SAMPLES = 240;
+
+  // Compute curves
+  const rA = new Float64Array(SAMPLES);
+  const rB = new Float64Array(SAMPLES);
+  let maxY = 0;
+  for (let i = 0; i < SAMPLES; i++) {
+    const r = (i / (SAMPLES - 1)) * rMax;
+    const R_A = state.killR ? 1 : radialR(state.An, state.Al, r);
+    const v_A = R_A * R_A * r * r;
+    rA[i] = v_A;
+    if (v_A > maxY) maxY = v_A;
+    if (state.mix > 0.01) {
+      const R_B = state.killR ? 1 : radialR(state.Bn, state.Bl, r);
+      const v_B = R_B * R_B * r * r;
+      rB[i] = v_B;
+      if (v_B > maxY) maxY = v_B;
+    }
+  }
+  if (maxY < 1e-12) maxY = 1;
+
+  // Grid
+  ctx.strokeStyle = DIAG_GRID;
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  for (let g = 0; g <= 4; g++) {
+    const y = padT + (innerH * g / 4);
+    ctx.moveTo(padL, y); ctx.lineTo(w - padR, y);
+  }
+  for (let g = 0; g <= 4; g++) {
+    const x = padL + (innerW * g / 4);
+    ctx.moveTo(x, padT); ctx.lineTo(x, h - padB);
+  }
+  ctx.stroke();
+
+  // axes
+  ctx.strokeStyle = DIAG_AXIS;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(padL, padT); ctx.lineTo(padL, h - padB); ctx.lineTo(w - padR, h - padB);
+  ctx.stroke();
+
+  // Curve A
+  ctx.strokeStyle = DIAG_ACC;
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  for (let i = 0; i < SAMPLES; i++) {
+    const x = padL + (i / (SAMPLES - 1)) * innerW;
+    const y = h - padB - (rA[i] / maxY) * innerH;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Curve B (if mixed)
+  if (state.mix > 0.01) {
+    ctx.strokeStyle = DIAG_MAG;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    for (let i = 0; i < SAMPLES; i++) {
+      const x = padL + (i / (SAMPLES - 1)) * innerW;
+      const y = h - padB - (rB[i] / maxY) * innerH;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  // r tick labels
+  ctx.fillStyle = DIAG_INK;
+  ctx.font = '8px JetBrains Mono';
+  ctx.textAlign = 'center';
+  ctx.fillText(`r→${rMax.toFixed(0)}`, w - padR - 14, h - 3);
+  ctx.textAlign = 'left';
+  ctx.fillText('0', padL + 2, h - 3);
+}
+
+// 2) Angular |Y_l^m(θ,φ)|² as polar plot (radius = |Y|² at fixed φ=0)
+function drawAngular() {
+  const d = diags.angular; if (!d) return;
+  const { ctx, w, h } = d;
+  ctx.fillStyle = DIAG_BG;
+  ctx.fillRect(0, 0, w, h);
+  const cx = w / 2, cy = h / 2;
+  const R = Math.min(w, h) * 0.42;
+
+  // axis crosshair
+  ctx.strokeStyle = DIAG_AXIS;
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy);
+  ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R);
+  ctx.stroke();
+
+  // Compute |Y(θ)|² at φ=0 for state A
+  const SAMPLES = 180;
+  const valsA = new Float64Array(SAMPLES);
+  const valsB = new Float64Array(SAMPLES);
+  let maxV = 0;
+  for (let i = 0; i < SAMPLES; i++) {
+    const theta = (i / (SAMPLES - 1)) * Math.PI;
+    const cosT = Math.cos(theta);
+    let yvA;
+    if (state.killY) {
+      yvA = 1 / (4 * Math.PI);
+    } else {
+      const ymA = sphericalHarmonic(state.Al, state.Am, cosT, 0, [0,0]);
+      yvA = ymA[0]*ymA[0] + ymA[1]*ymA[1];
+    }
+    valsA[i] = yvA;
+    if (yvA > maxV) maxV = yvA;
+    if (state.mix > 0.01) {
+      let yvB;
+      if (state.killY) {
+        yvB = 1 / (4 * Math.PI);
+      } else {
+        const ymB = sphericalHarmonic(state.Bl, state.Bm, cosT, 0, [0,0]);
+        yvB = ymB[0]*ymB[0] + ymB[1]*ymB[1];
+      }
+      valsB[i] = yvB;
+      if (yvB > maxV) maxV = yvB;
+    }
+  }
+  if (maxV < 1e-12) maxV = 1;
+
+  // Draw lobes for state A: plot in x-z plane, θ measured from +z axis
+  ctx.strokeStyle = DIAG_ACC;
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  for (let pass = 0; pass < 2; pass++) {
+    // Pass 0: φ = 0 (positive x side); Pass 1: φ = π (negative x side, mirror)
+    const sign = pass === 0 ? 1 : -1;
+    for (let i = 0; i < SAMPLES; i++) {
+      const theta = (i / (SAMPLES - 1)) * Math.PI;
+      const r = Math.sqrt(valsA[i] / maxV) * R;
+      const x = cx + sign * r * Math.sin(theta);
+      const y = cy - r * Math.cos(theta);
+      if (i === 0 && pass === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+  }
+  ctx.closePath();
+  ctx.stroke();
+
+  // State B if present
+  if (state.mix > 0.01) {
+    ctx.strokeStyle = DIAG_MAG;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    for (let pass = 0; pass < 2; pass++) {
+      const sign = pass === 0 ? 1 : -1;
+      for (let i = 0; i < SAMPLES; i++) {
+        const theta = (i / (SAMPLES - 1)) * Math.PI;
+        const r = Math.sqrt(valsB[i] / maxV) * R;
+        const x = cx + sign * r * Math.sin(theta);
+        const y = cy - r * Math.cos(theta);
+        if (i === 0 && pass === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+    }
+    ctx.closePath();
+    ctx.stroke();
+  }
+
+  // tiny z-arrow label
+  ctx.fillStyle = DIAG_INK;
+  ctx.font = '8px JetBrains Mono';
+  ctx.textAlign = 'center';
+  ctx.fillText('z', cx, cy - R - 1);
+}
+
+
+// 3) ψ on the z=0 plane (xy slice) — phase as hue, amplitude as lightness
+function drawSliceZ() {
+  const d = diags.slicez; if (!d) return;
+  drawComplexSlice(d, 'z');
+}
+// 4) ψ on the y=0 plane (xz slice)
+function drawSliceY() {
+  const d = diags.slicey; if (!d) return;
+  drawComplexSlice(d, 'y');
+}
+
+// Shared complex-field slice renderer.
+// plane = 'z' → sample (x,y,0); plane = 'y' → sample (x,0,z).
+// Renders into an ImageData buffer: hue = arg(ψ), lightness = |ψ|/max.
+// Honors falstad mode (collapses hue) so the slice mirrors the 3D cloud.
+function drawComplexSlice(d, plane) {
+  const { ctx, w, h } = d;
+  const W = Math.max(2, Math.floor(w));
+  const H = Math.max(2, Math.floor(h));
+  // Cache an offscreen buffer sized to the device-independent canvas.
+  if (!d._img || d._img.width !== W || d._img.height !== H) {
+    d._img = ctx.createImageData(W, H);
+  }
+  const img = d._img;
+  const data = img.data;
+
+  const nMax = Math.max(state.An, state.Bn);
+  const half = 3.2 * nMax * nMax;       // world half-extent mapped to the slice
+  const t = state.t;
+
+  // First pass: evaluate ψ on the grid, track max amplitude for normalization.
+  // Use a modest internal resolution and let putImageData scale via the canvas.
+  const out = [0, 0];
+  if (!d._re || d._re.length !== W * H) { d._re = new Float32Array(W * H); d._im = new Float32Array(W * H); }
+  const RE = d._re, IM = d._im;
+  let maxA = 1e-12;
+  for (let py = 0; py < H; py++) {
+    // screen y → world coordinate (flip so +up is +axis)
+    const wy = (0.5 - py / (H - 1)) * 2 * half;
+    for (let px = 0; px < W; px++) {
+      const wx = (px / (W - 1) - 0.5) * 2 * half;
+      let X, Y, Z;
+      if (plane === 'z') { X = wx; Y = wy; Z = 0; }
+      else               { X = wx; Y = 0;  Z = wy; }
+      psiTotal(X, Y, Z, t, out);
+      const idx = py * W + px;
+      RE[idx] = out[0];
+      IM[idx] = out[1];
+      const a = Math.sqrt(out[0]*out[0] + out[1]*out[1]);
+      if (a > maxA) maxA = a;
+    }
+  }
+
+  // Second pass: write pixels.
+  const inv = 1 / maxA;
+  for (let i = 0; i < W * H; i++) {
+    const re = RE[i], im = IM[i];
+    const a = Math.sqrt(re*re + im*im) * inv;   // 0..1
+    const o = i * 4;
+    if (a < 0.012) {
+      data[o] = 10; data[o+1] = 13; data[o+2] = 24; data[o+3] = 255;
+      continue;
+    }
+    let r, g, b;
+    if (state.falstad || state.decohere) {
+      // |ψ|² mode (or classical mixture): cool monochrome, no phase.
+      const lum = Math.min(1, a * 1.25);
+      r = (0.55 * lum + 0.02) * 255;
+      g = (0.72 * lum + 0.04) * 255;
+      b = (0.85 * lum + 0.06) * 255;
+    } else {
+      const phase = Math.atan2(im, re);
+      const hue = (phase + Math.PI) / (2 * Math.PI);     // 0..1
+      const light = 0.12 + 0.55 * a;
+      const rgb = hsl2rgbJS(hue, 0.92, Math.min(0.85, light));
+      r = rgb[0] * 255; g = rgb[1] * 255; b = rgb[2] * 255;
+    }
+    data[o] = r; data[o+1] = g; data[o+2] = b; data[o+3] = 255;
+  }
+
+  // Blit the buffer 1:1 (canvas backing store is already DPR-scaled by ctx.scale,
+  // so draw at device-independent size).
+  ctx.putImageData(img, 0, 0);
+
+  // crosshair + label
+  ctx.strokeStyle = 'rgba(122,128,149,0.25)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(w/2, 0); ctx.lineTo(w/2, h);
+  ctx.moveTo(0, h/2); ctx.lineTo(w, h/2);
+  ctx.stroke();
+}
+
+// JS mirror of the shader's hsl2rgb (h,s,l all in 0..1) → [r,g,b] in 0..1
+function hsl2rgbJS(h, s, l) {
+  const a = s * Math.min(l, 1 - l);
+  const f = (n) => {
+    const k = (n + h * 12) % 12;
+    return l - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)));
+  };
+  return [f(0), f(8), f(4)];
+}
+
+// 5) Phase histogram — distribution of arg(ψ) over the cloud, colored by phase.
+//    Collapses to a single spike when phase is killed (falstad / real-valued states).
+function drawPhase() {
+  const d = diags.phase; if (!d) return;
+  const { ctx, w, h } = d;
+  ctx.fillStyle = DIAG_BG;
+  ctx.fillRect(0, 0, w, h);
+
+  const BINS = 48;
+  const bins = new Float64Array(BINS);
+  const N = state.N;
+  if (phaseArr && ampArr && N > 0) {
+    for (let i = 0; i < N; i++) {
+      const a = ampArr[i];
+      if (a < 0.02) continue;            // ignore near-zero amplitude (no defined phase)
+      let p = phaseArr[i];
+      let b = Math.floor((p + Math.PI) / (2 * Math.PI) * BINS);
+      if (b < 0) b = 0; if (b >= BINS) b = BINS - 1;
+      bins[b] += a;                       // weight by amplitude
+    }
+  }
+  let maxB = 1e-12;
+  for (let i = 0; i < BINS; i++) if (bins[i] > maxB) maxB = bins[i];
+
+  const padL = 4, padR = 4, padT = 8, padB = 12;
+  const innerW = w - padL - padR;
+  const innerH = h - padT - padB;
+  const bw = innerW / BINS;
+  for (let i = 0; i < BINS; i++) {
+    const frac = bins[i] / maxB;
+    const bh = frac * innerH;
+    const x = padL + i * bw;
+    const y = h - padB - bh;
+    if (state.falstad || state.decohere) {
+      ctx.fillStyle = 'rgba(140,184,217,0.85)';
+    } else {
+      const phase = (i + 0.5) / BINS * 2 * Math.PI - Math.PI;
+      ctx.fillStyle = phaseToColor(phase, 0.8);
+    }
+    ctx.fillRect(x, y, Math.max(1, bw - 0.5), bh);
+  }
+
+  ctx.fillStyle = DIAG_INK;
+  ctx.font = '8px JetBrains Mono';
+  ctx.textAlign = 'left';
+  ctx.fillText('−π', padL, h - 3);
+  ctx.textAlign = 'right';
+  ctx.fillText('+π', w - padR, h - 3);
+  ctx.textAlign = 'center';
+  ctx.fillText('arg ψ', w/2, h - 3);
+}
+
+// 6) Energy ladder — Bohr levels E_n = −1/(2n²), with A and B marked.
+function drawEnergy() {
+  const d = diags.energy; if (!d) return;
+  const { ctx, w, h } = d;
+  ctx.fillStyle = DIAG_BG;
+  ctx.fillRect(0, 0, w, h);
+
+  const padL = 8, padR = 8, padT = 10, padB = 14;
+  const innerW = w - padL - padR;
+  const innerH = h - padT - padB;
+
+  const nLevels = 5;
+  // Map E ∈ [−0.5, 0] to y ∈ [bottom, top]. E=−0.5 (n=1) at bottom, E→0 at top.
+  const Emin = -0.5, Emax = 0;
+  const yOf = (E) => (h - padB) - ((E - Emin) / (Emax - Emin)) * innerH;
+
+  // ionization line at E=0
+  ctx.strokeStyle = DIAG_AXIS;
+  ctx.setLineDash([2, 2]);
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(padL, yOf(0)); ctx.lineTo(w - padR, yOf(0));
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.font = '8px JetBrains Mono';
+  for (let n = 1; n <= nLevels; n++) {
+    const E = E_n(n);
+    const y = yOf(E);
+    const isA = (n === state.An);
+    const isB = (state.mix > 0.01 && n === state.Bn);
+    let col = DIAG_GRID;
+    let lw = 1;
+    if (isA && isB) { col = DIAG_WARM; lw = 2; }
+    else if (isA)   { col = DIAG_ACC;  lw = 2; }
+    else if (isB)   { col = DIAG_MAG;  lw = 2; }
+    ctx.strokeStyle = col;
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    ctx.moveTo(padL, y); ctx.lineTo(w - padR - 14, y);
+    ctx.stroke();
+    ctx.fillStyle = (isA || isB) ? col : DIAG_INK;
+    ctx.textAlign = 'right';
+    ctx.fillText(`n=${n}`, w - padR, y + 3);
+  }
+
+  // beat connector if both states active and non-degenerate
+  if (state.mix > 0.01 && state.An !== state.Bn) {
+    const yA = yOf(E_n(state.An));
+    const yB = yOf(E_n(state.Bn));
+    ctx.strokeStyle = 'rgba(255,184,77,0.5)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([1, 2]);
+    ctx.beginPath();
+    ctx.moveTo(padL + 4, yA); ctx.lineTo(padL + 4, yB);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+// dispatcher — throttled separately from the 3D loop (canvas 2D is comparatively costly)
+let _diagTick = 0;
+function drawDiagnostics() {
+  // Static diagnostics (radial, angular, energy) only need redraw on state change.
+  // Field slices + phase histogram are time-dependent → redraw each call.
+  if (_diagDirty) {
+    drawRadial();
+    drawAngular();
+    drawEnergy();
+    _diagDirty = false;
+  }
+  drawSliceZ();
+  drawSliceY();
+  drawPhase();
+}
+let _diagDirty = true;
+function markDiagDirty() { _diagDirty = true; }
+
+
+// ============================================================
+// ORBITAL CHOOSER TABLE
+// Rows = n (1..5), columns = subshell letter (s,p,d,f,g → l=0..4).
+// A cell exists only where l < n. Clicking sets State A; shift-click sets State B.
+// Each populated cell carries an m-picker (m = −l..+l).
+// ============================================================
+const SUBSHELL = ['s', 'p', 'd', 'f', 'g'];
+const N_MAX_TABLE = 5;
+
+function buildOrbitalTable() {
+  const tbl = document.getElementById('orb-table');
+  if (!tbl) return;
+  tbl.innerHTML = '';
+
+  // header row
+  const thead = document.createElement('tr');
+  thead.appendChild(document.createElement('th')); // corner
+  for (let l = 0; l < N_MAX_TABLE; l++) {
+    const th = document.createElement('th');
+    th.textContent = SUBSHELL[l];
+    thead.appendChild(th);
+  }
+  tbl.appendChild(thead);
+
+  for (let n = 1; n <= N_MAX_TABLE; n++) {
+    const tr = document.createElement('tr');
+    const rowHead = document.createElement('th');
+    rowHead.textContent = n;
+    tr.appendChild(rowHead);
+    for (let l = 0; l < N_MAX_TABLE; l++) {
+      const td = document.createElement('td');
+      if (l >= n) {
+        const cell = document.createElement('div');
+        cell.className = 'orb-cell empty';
+        td.appendChild(cell);
+      } else {
+        const cell = document.createElement('div');
+        cell.className = 'orb-cell';
+        cell.dataset.n = n;
+        cell.dataset.l = l;
+        cell.textContent = `${n}${SUBSHELL[l]}`;
+        cell.addEventListener('click', (e) => {
+          // pick the m closest to the current target's m, clamped to ±l
+          if (e.shiftKey) {
+            state.Bn = n; state.Bl = l; state.Bm = clampM(state.Bm, l);
+          } else {
+            state.An = n; state.Al = l; state.Am = clampM(state.Am, l);
+          }
+          syncAll();
+        });
+        td.appendChild(cell);
+      }
+      tr.appendChild(td);
+    }
+    tbl.appendChild(tr);
+  }
+  refreshOrbitalTable();
+}
+
+function clampM(m, l) {
+  if (m > l) return l;
+  if (m < -l) return -l;
+  return m;
+}
+
+function refreshOrbitalTable() {
+  const cells = document.querySelectorAll('.orb-cell:not(.empty)');
+  cells.forEach(cell => {
+    const n = +cell.dataset.n, l = +cell.dataset.l;
+    const isA = (n === state.An && l === state.Al);
+    const isB = (state.mix > 0.001 && n === state.Bn && l === state.Bl);
+    cell.classList.remove('is-A', 'is-B', 'is-both');
+    if (isA && isB) cell.classList.add('is-both');
+    else if (isA) cell.classList.add('is-A');
+    else if (isB) cell.classList.add('is-B');
+  });
+  const aOut = document.getElementById('orb-A-readout');
+  const bOut = document.getElementById('orb-B-readout');
+  if (aOut) aOut.textContent = `A: ${orbName(state.An, state.Al, state.Am)} (l=${state.Al}, m=${state.Am})`;
+  if (bOut) bOut.textContent = `B: ${orbName(state.Bn, state.Bl, state.Bm)} (l=${state.Bl}, m=${state.Bm})`;
+}
+
+// human-readable orbital name, e.g. 2p_z, 3d, 1s
+function orbName(n, l, m) {
+  const letter = SUBSHELL[l] || `l${l}`;
+  let suffix = '';
+  if (l === 1) suffix = (m === 0) ? '_z' : (m > 0 ? '₊' : '₋');
+  else if (l >= 2 && m !== 0) suffix = (m > 0 ? `₊${Math.abs(m)}` : `₋${Math.abs(m)}`);
+  else if (l >= 2 && m === 0) suffix = '_z²';
+  return `${n}${letter}${suffix}`;
+}
+
+// ============================================================
+// PRESETS
+// ============================================================
+const PRESETS = [
+  { t: '2p_z eigenstate', s: { An:2, Al:1, Am:0, mix:0 } },
+  { t: '3d_z²', s: { An:3, Al:2, Am:0, mix:0 } },
+  { t: '2p m=+1 (L_z)', s: { An:2, Al:1, Am:1, mix:0 } },
+  { t: '1s + 2s beat', s: { An:2, Al:0, Am:0, Bn:1, Bl:0, Bm:0, mix:0.707 } },
+  { t: '1s + 2p beat', s: { An:2, Al:1, Am:0, Bn:1, Bl:0, Bm:0, mix:0.707 } },
+  { t: '2s + 2p hybrid', s: { An:2, Al:1, Am:0, Bn:2, Bl:0, Bm:0, mix:0.707 } },
+  { t: '4f m=+3', s: { An:4, Al:3, Am:3, mix:0 } },
+  { t: '3p + 3d (degenerate)', s: { An:3, Al:2, Am:0, Bn:3, Bl:1, Bm:0, mix:0.707 } },
+];
+
+function buildPresets() {
+  const grid = document.getElementById('preset-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  PRESETS.forEach(p => {
+    const b = document.createElement('button');
+    b.className = 'preset-btn';
+    b.innerHTML = `<span class="pt">${p.t}</span>`;
+    b.addEventListener('click', () => {
+      Object.assign(state, p.s);
+      // validity guard
+      if (!isValidQN(state.An, state.Al, state.Am)) { state.Al = 0; state.Am = 0; }
+      if (!isValidQN(state.Bn, state.Bl, state.Bm)) { state.Bl = 0; state.Bm = 0; }
+      state.t = 0;
+      state.resampleRequested = true;
+      syncAll();
+    });
+    grid.appendChild(b);
+  });
+}
+
+
+// ============================================================
+// UI WIRING
+// ============================================================
+const $ = (id) => document.getElementById(id);
+
+// ---- quantum-number steppers ----
+// Each stepper enforces the QN hierarchy: 1≤n, 0≤l≤n−1, −l≤m≤+l.
+function wireStepper(prefix, key) {
+  // prefix e.g. 'An' with buttons 'An-' / 'An+' and value span 'An_v'
+  const dec = $(`${prefix}-`);
+  const inc = $(`${prefix}+`);
+  if (dec) dec.addEventListener('click', () => stepQN(prefix[0], prefix[1], -1));
+  if (inc) inc.addEventListener('click', () => stepQN(prefix[0], prefix[1], +1));
+}
+
+// which = 'A' or 'B'; q = 'n','l','m'; dir = ±1
+function stepQN(which, q, dir) {
+  let n = state[`${which}n`], l = state[`${which}l`], m = state[`${which}m`];
+  if (q === 'n') {
+    n = Math.max(1, Math.min(N_MAX_TABLE, n + dir));
+    if (l > n - 1) l = n - 1;
+    if (Math.abs(m) > l) m = clampM(m, l);
+  } else if (q === 'l') {
+    l = Math.max(0, Math.min(n - 1, l + dir));
+    if (Math.abs(m) > l) m = clampM(m, l);
+  } else { // m
+    m = Math.max(-l, Math.min(l, m + dir));
+  }
+  state[`${which}n`] = n; state[`${which}l`] = l; state[`${which}m`] = m;
+  if (q === 'n') state.resampleRequested = true; // sampling radius depends on n
+  syncAll();
+}
+
+['An','Al','Am','Bn','Bl','Bm'].forEach(p => wireStepper(p, p));
+
+// update stepper value displays + disabled states
+function syncSteppers() {
+  const set = (id, v) => { const e = $(id); if (e) e.textContent = v; };
+  set('An_v', state.An); set('Al_v', state.Al); set('Am_v', state.Am);
+  set('Bn_v', state.Bn); set('Bl_v', state.Bl); set('Bm_v', state.Bm);
+
+  const dis = (id, cond) => { const e = $(id); if (e) e.disabled = cond; };
+  // A
+  dis('An-', state.An <= 1);          dis('An+', state.An >= N_MAX_TABLE);
+  dis('Al-', state.Al <= 0);          dis('Al+', state.Al >= state.An - 1);
+  dis('Am-', state.Am <= -state.Al);  dis('Am+', state.Am >= state.Al);
+  // B
+  dis('Bn-', state.Bn <= 1);          dis('Bn+', state.Bn >= N_MAX_TABLE);
+  dis('Bl-', state.Bl <= 0);          dis('Bl+', state.Bl >= state.Bn - 1);
+  dis('Bm-', state.Bm <= -state.Bl);  dis('Bm+', state.Bm >= state.Bl);
+
+  const fA = $('A_formula');
+  if (fA) fA.innerHTML = `${orbName(state.An, state.Al, state.Am)} · E = ${E_n(state.An).toFixed(3)}`;
+  const fB = $('B_formula');
+  if (fB) fB.innerHTML = `${orbName(state.Bn, state.Bl, state.Bm)} · E = ${E_n(state.Bn).toFixed(3)}`;
+}
+
+// ---- sliders ----
+function wireSlider(id, key, fmt, opts = {}) {
+  const el = $(id);
+  if (!el) return;
+  el.value = state[key];
+  const valEl = $(`${key}_v`) || $(`${id}_v`);
+  const onIn = () => {
+    state[key] = parseFloat(el.value);
+    if (valEl) valEl.textContent = fmt(state[key]);
+    if (opts.resample) state.resampleRequested = true;
+    if (opts.dirty) markDiagDirty();
+  };
+  el.addEventListener('input', onIn);
+  onIn();
+}
+
+wireSlider('mix', 'mix', v => v.toFixed(3), { dirty: true });
+wireSlider('dphi', 'dphi', v => v.toFixed(2), { dirty: true });
+wireSlider('speed', 'speed', v => v.toFixed(1) + '×');
+wireSlider('N', 'N', v => Math.round(v).toString(), { resample: true });
+wireSlider('bri', 'bri', v => v.toFixed(1) + '×');
+wireSlider('pace', 'pace', v => v.toFixed(1) + '×');
+
+// ---- ESA toggles ----
+// each id maps to a state flag; some also flip a shader uniform.
+const ESA_MAP = [
+  { id: 'esa-killR',    flag: 'killR',    dirty: true },
+  { id: 'esa-killY',    flag: 'killY',    dirty: true },
+  { id: 'esa-killAz',   flag: 'killAz',   dirty: true },
+  { id: 'esa-killTime', flag: 'killTime', dirty: true },
+  { id: 'esa-falstad',  flag: 'falstad',  uniform: 'uFalstadMode', dirty: true },
+  { id: 'esa-decohere', flag: 'decohere', dirty: true },
+  { id: 'esa-nodes',    flag: 'showNodes', uniform: 'uShowNodes' },
+  { id: 'esa-bohr',     flag: 'showBohr' },
+  { id: 'esa-reveal',   flag: 'reveal',   uniform: 'uReveal' },
+];
+
+ESA_MAP.forEach(({ id, flag, uniform, dirty }) => {
+  const el = $(id);
+  if (!el) return;
+  el.addEventListener('click', () => {
+    state[flag] = !state[flag];
+    el.classList.toggle('active', state[flag]);
+    if (uniform) pointUniforms[uniform].value = state[flag] ? 1.0 : 0.0;
+    // Decohere carries no global phase (it is a classical mixture) -- drive the
+    // grey |psi|^2 look the same way Falstad mode does, so the cloud never paints
+    // a misleading phase texture onto a statistical mixture.
+    pointUniforms.uFalstadMode.value = (state.falstad || state.decohere) ? 1.0 : 0.0;
+    if (flag === 'showBohr') bohrSphere.visible = state[flag];
+    if (dirty) markDiagDirty();
+    syncEquation();
+  });
+});
+
+// strike through the killed terms in the equation panel
+function syncEquation() {
+  const setKill = (id, killed) => {
+    const e = $(id); if (!e) return;
+    e.classList.toggle('killed', killed);
+  };
+  setKill('t-R', state.killR);
+  setKill('t-Y', state.killY || state.killAz);
+  setKill('t-Y2', state.killY);
+  setKill('t-leg', state.killY);
+  setKill('t-az', state.killY || state.killAz);
+  setKill('t-phase', state.killTime);
+}
+
+// ---- buttons ----
+function togglePause(force) {
+  state.paused = (typeof force === 'boolean') ? force : !state.paused;
+  const b = $('btn-pause');
+  if (b) { b.textContent = state.paused ? 'play' : 'pause'; b.classList.toggle('active', state.paused); }
+  const icon = $('ro-pause-icon');
+  if (icon) icon.textContent = state.paused ? '▶' : '❚❚';
+}
+$('btn-pause')?.addEventListener('click', () => togglePause());
+$('ro-pause')?.addEventListener('click', () => togglePause());
+// spacebar toggles play/pause (unless typing in an input)
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Space' && e.target.tagName !== 'INPUT') {
+    e.preventDefault();
+    togglePause();
+  }
+});
+$('btn-reset')?.addEventListener('click', () => { state.t = 0; });
+$('btn-resample')?.addEventListener('click', () => { state.resampleRequested = true; });
+$('btn-focus')?.addEventListener('click', () => {
+  // frame the cloud: set camera distance from current sampling extent
+  const nMax = Math.max(state.An, state.Bn);
+  const Rmax = Math.max(8, 3.2 * nMax * nMax);
+  const dist = Rmax * 1.4;
+  const dir = camera.position.clone().sub(controls.target).normalize();
+  camera.position.copy(dir.multiplyScalar(dist));
+  controls.target.set(0, 0, 0);
+  controls.update();
+});
+
+// ---- readout ----
+function updateReadout() {
+  const { E, r, beatT } = computeExpectations();
+  const set = (id, v) => { const e = $(id); if (e) e.textContent = v; };
+  set('ro-t', state.t.toFixed(2));
+  set('ro-E', E.toFixed(3));
+  // ⟨r⟩: if killR, the analytic value is meaningless → show divergence marker
+  set('ro-r', state.killR ? '∞' : r.toFixed(2));
+  // norm: 1.000 for a clean eigenstate/superposition; deviates when killR breaks normalizability
+  set('ro-norm', _lastNormSq.toFixed(3));
+  set('ro-beat', beatT ? beatT.toFixed(1) : '—');
+
+  // regime classifier
+  const roReg = $('ro-regime');
+  if (roReg) {
+    let label, col;
+    if (state.mix < 0.01) { label = 'eigenstate'; col = 'var(--good)'; }
+    else if (state.An === state.Bn) { label = 'degenerate mix'; col = 'var(--accent-warm)'; }
+    else if (state.decohere) { label = 'classical mixture'; col = 'var(--danger)'; }
+    else { label = 'superposition'; col = 'var(--accent-mag)'; }
+    roReg.textContent = label;
+    roReg.style.color = col;
+  }
+}
+
+// ---- bohr sphere radius update ----
+function updateBohr() {
+  if (!bohrSphere.visible) return;
+  // r = n²·a₀ for the dominant state (A unless B dominates)
+  const nUse = (state.mix > 0.707) ? state.Bn : state.An;
+  const rB = nUse * nUse * A0;
+  bohrSphere.scale.setScalar(rB);
+}
+
+// ============================================================
+// MASTER SYNC — push state → all UI surfaces
+// ============================================================
+function syncAll() {
+  syncSteppers();
+  refreshOrbitalTable();
+  syncEquation();
+  pointUniforms.uBri.value = state.bri;
+  pointUniforms.uPointSize.value = 2.6;
+  markDiagDirty();
+}
+
+
+// ============================================================
+// RESIZE
+// ============================================================
+function onResize() {
+  const W = window.innerWidth, H = window.innerHeight;
+  camera.aspect = W / H;
+  camera.updateProjectionMatrix();
+  renderer.setSize(W, H);
+  composer.setSize(W, H);
+  bloom.setSize(W, H);
+  pointUniforms.uPixelRatio.value = renderer.getPixelRatio();
+  // diagnostics canvases need re-measuring (their CSS size may have changed)
+  initDiagnostics();
+  markDiagDirty();
+}
+window.addEventListener('resize', onResize);
+
+// ============================================================
+// ANIMATION LOOP
+// ============================================================
+let _last = performance.now();
+let _diagAccum = 0;
+const DIAG_INTERVAL = 1 / 20;   // redraw diagnostics at ~20 Hz (cheaper than 60)
+
+function animate() {
+  requestAnimationFrame(animate);
+  const now = performance.now();
+  let dt = (now - _last) / 1000;
+  _last = now;
+  if (dt > 0.1) dt = 0.1;        // clamp after tab-switch stalls
+
+  // handle pending resample
+  if (state.resampleRequested) {
+    resampleCloud(state.N);
+    // resize Bohr is independent; field slices recompute next frame
+  }
+
+  // advance time (atomic units). speed multiplies; ×1 ≈ 1 a.u./s of wall clock.
+  if (!state.paused) {
+    state.t += dt * state.speed;
+  }
+
+  // Reveal phase-front sweep: the constant-arg fronts of the dominant state sit
+  // at arg(ψ) = −E·t (+const). Track that literal phase clock; `pace` scales it
+  // perceptually without changing the relative ordering between states (1s beats
+  // fastest because |E| is largest). World-space only — no camera term.
+  if (state.reveal) {
+    const nDom = (state.mix > 0.707) ? state.Bn : state.An;
+    const Edom = E_n(nDom);                    // negative
+    const sweep = -Edom * state.t * state.pace; // rad
+    pointUniforms.uSweep.value = ((sweep % (2*Math.PI)) + 2*Math.PI) % (2*Math.PI) - Math.PI;
+  }
+
+  // recompute ψ over the cloud every frame (time phase + interference are live)
+  updateCloud();
+
+  updateBohr();
+  updateReadout();
+  controls.update();
+
+  // throttled 2D diagnostics
+  _diagAccum += dt;
+  if (_diagAccum >= DIAG_INTERVAL) {
+    _diagAccum = 0;
+    drawDiagnostics();
+  }
+
+  composer.render();
+}
+
+// ============================================================
+// BOOTSTRAP
+// ============================================================
+function init() {
+  buildOrbitalTable();
+  buildPresets();
+  initDiagnostics();
+  resampleCloud(state.N);
+  syncAll();
+  // initialize ESA toggle visual state (all off at start)
+  ESA_MAP.forEach(({ id, flag, uniform }) => {
+    const el = $(id);
+    if (el) el.classList.toggle('active', !!state[flag]);
+    if (uniform) pointUniforms[uniform].value = state[flag] ? 1.0 : 0.0;
+  });
+  bohrSphere.visible = state.showBohr;
+  onResize();
+  animate();
+}
+
+// run after fonts/layout settle so canvas measurements are correct
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+  requestAnimationFrame(init);
+} else {
+  window.addEventListener('DOMContentLoaded', () => requestAnimationFrame(init));
+}
+
+</script>
+</body>
+</html>
