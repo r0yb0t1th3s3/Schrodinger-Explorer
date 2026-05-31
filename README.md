@@ -98,5 +98,3 @@ step, no server — it is a single self-contained file using Three.js from a CDN
 
 - `index.html` — the application (UI, physics, WebGL rendering).
 - `theory.md` — the design rationale and the per-toggle predictions.
-- `ESM_specification_v1_0.md` — the methodological framework the tool is built
-  against.
