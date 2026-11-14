@@ -477,17 +477,17 @@
 
       <div class="section-head">Dynamics</div>
       <div class="control">
-        <div class="row"><span class="lbl">time speed</span><span class="val" id="speed_v">1.0×</span></div>
-        <input type="range" id="speed" min="0" max="3" step="0.05" value="1">
+        <div class="row"><span class="lbl">time speed</span><span class="val" id="speed_v">3.0×</span></div>
+        <input type="range" id="speed" min="0" max="3" step="0.05" value="3">
       </div>
       <div class="control">
-        <div class="row"><span class="lbl">samples N</span><span class="val" id="N_v">60000</span></div>
-        <input type="range" id="N" min="5000" max="120000" step="1000" value="60000">
+        <div class="row"><span class="lbl">samples N</span><span class="val" id="N_v">86000</span></div>
+        <input type="range" id="N" min="5000" max="120000" step="1000" value="86000">
         <div class="desc">Point cloud size. Higher = smoother density at frame-rate cost.</div>
       </div>
       <div class="control">
-        <div class="row"><span class="lbl">cloud brightness</span><span class="val" id="bri_v">1.0×</span></div>
-        <input type="range" id="bri" min="0.2" max="4" step="0.05" value="1">
+        <div class="row"><span class="lbl">cloud brightness</span><span class="val" id="bri_v">1.7×</span></div>
+        <input type="range" id="bri" min="0.2" max="4" step="0.05" value="1.7">
       </div>
 
       <div class="btn-row" style="display:flex;gap:6px;margin-top:14px;flex-wrap:wrap">
@@ -890,19 +890,20 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 // ---------- state ----------
 const state = {
-  // State A
-  An: 2, Al: 1, Am: 0,
+  // State A: opens on 5d, m = +2. Seen down the z-axis the phase winds twice
+  // around it (two arms = |m|) and the two radial nodes show as rings.
+  An: 5, Al: 2, Am: 2,
   // State B (for superposition)
   Bn: 1, Bl: 0, Bm: 0,
   // Mixing
   mix: 0.0,          // β amplitude; α = sqrt(1 - β²)
   dphi: 0.0,         // relative phase offset δ
   // Dynamics
-  speed: 1.0,
+  speed: 3.0,
   paused: false,
   t: 0.0,
-  bri: 1.0,          // brightness multiplier
-  N: 60000,          // sample count
+  bri: 1.7,          // brightness multiplier
+  N: 86000,          // sample count
   // ESA toggles
   killR: false,
   killY: false,
@@ -1133,7 +1134,8 @@ const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x06060d, 0.008);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000);
-camera.position.set(22, 14, 26);
+camera.position.set(0, 0, 60);   // top-down: looking along −z, the quantization axis.
+                                 // The opening pull-back (beginIntro) sets the distance.
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -1268,7 +1270,10 @@ const pointFragShader = `
     } else {
       // phase → hue.  Map [-π, π] → [0, 1] hue wheel
       float hue = (vPhase + 3.14159265) / 6.28318530;
-      float light = clamp(0.30 + 0.45 * amp, 0.0, 0.95);
+      // Per-point brightness cap. HSL lightness above ~0.6 bleaches every hue toward
+      // white, which used to wash out the core exactly where |ψ| is largest. Lightness
+      // now tops out at a vivid 0.58; density reads through point size and alpha.
+      float light = clamp(0.28 + 0.30 * amp, 0.0, 0.58);
       float sat = 0.95;
 
       // ---- Reveal: phase-front comet ----
@@ -1285,7 +1290,7 @@ const pointFragShader = `
         float wake = behind * exp(dp / 0.9);   // wide, slow decay behind the front
         // saturation pops at the crest, brightness lingers in the wake
         sat   = clamp(sat + 0.05 * crestSat, 0.0, 1.0);
-        light = clamp(light + 0.40 * crestSat + 0.22 * wake, 0.0, 1.0);
+        light = clamp(light + 0.28 * crestSat + 0.14 * wake, 0.0, 0.78); // flare stays colored
       }
 
       color = hsl2rgb(vec3(hue, sat, light));
@@ -1299,11 +1304,16 @@ const pointFragShader = `
     // Alpha: gentler core gain than before so dense regions keep their hue
     // instead of additive-blooming to white. You can zoom into the core and
     // still resolve individual colored points.
-    float alpha = falloff * clamp(0.35 + amp * 0.85, 0.0, 1.0);
+    // Capped below 1 so stacked core points can't all add up to white.
+    float alpha = falloff * clamp(0.30 + amp * 0.70, 0.0, 0.80);
     gl_FragColor = vec4(color, alpha);
   }
 `;
 
+// Point size scales with the sampling radius (∝ n²) so every state looks equally fine-grained
+// when framed. A fixed size made small-n clouds, viewed from close up, pile into a white ball.
+let _pointScale = 1.0;
+let _lastRmax = null;
 const pointUniforms = {
   uPixelRatio: { value: renderer.getPixelRatio() },
   uPointSize: { value: 2.6 },
@@ -1347,6 +1357,11 @@ function resampleCloud(N) {
   // Choose sampling radius based on max relevant state: ~3 * largest n²
   const nMax = Math.max(state.An, state.Bn);
   const Rmax = Math.max(8, 3.2 * nMax * nMax);
+  _pointScale = Rmax / 80;                       // 1.0 at n = 5
+  pointUniforms.uPointSize.value = 2.6 * _pointScale;
+  // cloud size changed (n changed): reframe once the new |ψ| is evaluated
+  if (_lastRmax !== null && Rmax !== _lastRmax) _focusPending = true;
+  _lastRmax = Rmax;
 
   // Bias: r ~ sqrt(uniform) gives uniform density in 2D-disk projection,
   // but for 3D we want more central density. Use power law: r ~ u^0.5 gives r ∝ √u so
@@ -2203,16 +2218,61 @@ window.addEventListener('keydown', (e) => {
 });
 $('btn-reset')?.addEventListener('click', () => { state.t = 0; });
 $('btn-resample')?.addEventListener('click', () => { state.resampleRequested = true; });
-$('btn-focus')?.addEventListener('click', () => {
-  // frame the cloud: set camera distance from current sampling extent
+// ---- framing ----
+// Distance at which the cloud's visible body fills the view: the radius that encloses 97% of
+// the |psi|^2 weight carried by the sample points (the sparse faint halo doesn't set the zoom).
+function fitDistance() {
+  const N = state.N;
+  const rs = new Float32Array(N), ws = new Float32Array(N);
+  let k = 0, total = 0;
+  for (let i = 0; i < N; i++) {
+    const a = ampArr[i];
+    if (!(a > 0.002)) continue;
+    const x = posArr[3*i], y = posArr[3*i+1], z = posArr[3*i+2];
+    rs[k] = Math.sqrt(x*x + y*y + z*z);
+    ws[k] = a * a;
+    total += ws[k];
+    k++;
+  }
   const nMax = Math.max(state.An, state.Bn);
-  const Rmax = Math.max(8, 3.2 * nMax * nMax);
-  const dist = Rmax * 1.4;
-  const dir = camera.position.clone().sub(controls.target).normalize();
-  camera.position.copy(dir.multiplyScalar(dist));
+  let R = Math.max(8, 3.2 * nMax * nMax) / 1.4;   // fallback before amplitudes exist
+  if (k > 100 && total > 0) {
+    const idx = Array.from({ length: k }, (_, i) => i).sort((p, q) => rs[p] - rs[q]);
+    let acc = 0;
+    for (const i of idx) { acc += ws[i]; if (acc >= 0.97 * total) { R = rs[i]; break; } }
+  }
+  const vHalf = THREE.MathUtils.degToRad(camera.fov / 2);
+  const hHalf = Math.atan(Math.tan(vHalf) * camera.aspect);
+  return 1.05 * R / Math.sin(Math.min(vHalf, hHalf));
+}
+
+// Camera dolly along the current view direction, eased. Used by the opening shot and FOCUS.
+// Any drag, wheel or touch hands control straight back to the user.
+let _dolly = null;
+let _introPending = true;
+let _focusPending = false;
+function dollyTo(from, to, dur) {
   controls.target.set(0, 0, 0);
-  controls.update();
-});
+  const dir = camera.position.clone().sub(controls.target).normalize();
+  _dolly = { t0: performance.now(), dur, from, to, dir };
+}
+function stepDolly(now) {
+  if (!_dolly) return;
+  const u = Math.min(1, (now - _dolly.t0) / _dolly.dur);
+  const e = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;   // easeInOutCubic
+  camera.position.copy(_dolly.dir.clone().multiplyScalar(_dolly.from + (_dolly.to - _dolly.from) * e));
+  if (u >= 1) _dolly = null;
+}
+// Opening shot: start inside the cloud, pull back until the whole state is framed.
+function beginIntro() {
+  const end = fitDistance();
+  dollyTo(end * 0.3, end, 4200);
+  stepDolly(performance.now());
+}
+['pointerdown', 'wheel', 'touchstart'].forEach(ev =>
+  renderer.domElement.addEventListener(ev, () => { _dolly = null; }, { passive: true }));
+
+$('btn-focus')?.addEventListener('click', () => { _focusPending = true; });
 
 // ---- readout ----
 function updateReadout() {
@@ -2256,7 +2316,7 @@ function syncAll() {
   refreshOrbitalTable();
   syncEquation();
   pointUniforms.uBri.value = state.bri;
-  pointUniforms.uPointSize.value = 2.6;
+  pointUniforms.uPointSize.value = 2.6 * _pointScale;
   markDiagDirty();
 }
 
@@ -2319,6 +2379,13 @@ function animate() {
 
   updateBohr();
   updateReadout();
+  // framing needs this frame's |ψ|, so it runs after updateCloud()
+  if (_introPending) { _introPending = false; _focusPending = false; beginIntro(); }
+  else if (_focusPending) {
+    _focusPending = false;
+    dollyTo(camera.position.distanceTo(controls.target), fitDistance(), 1100);
+  }
+  stepDolly(now);
   controls.update();
 
   // throttled 2D diagnostics

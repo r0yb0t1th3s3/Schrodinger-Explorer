@@ -1,5 +1,9 @@
 # Schrödinger ψ-Explorer
 
+**[▶ Open it live in your browser](https://r0yb0t1th3s3.github.io/Schrodinger-Explorer/)** · no install, one file
+
+[![The ψ-Explorer showing the 5d, m = +2 state: hue is the phase arg(ψ), brightness is |ψ|](media/preview.jpg)](https://r0yb0t1th3s3.github.io/Schrodinger-Explorer/)
+
 An interactive 3D viewer for hydrogen-like quantum eigenstates that renders the
 **full complex wavefunction** — both its amplitude and its phase — rather than
 the probability density alone.
@@ -38,7 +42,15 @@ Non-degenerate superpositions **beat**: the density sloshes back and forth at a
 period set by the energy difference (shown as "beat T" in the readout).
 Play/pause sits in the top readout bar and on the spacebar.
 
-**samples N / brightness** — point-cloud density and glow.
+**samples N / brightness** — point-cloud density and glow. Each point's brightness
+is capped so the hue survives in the dense core instead of washing out to white;
+raising brightness lifts the faint outer shells.
+
+**focus** — frames the whole cloud along the current view. The view also reframes
+itself whenever n changes, so a small 1s state never shrinks to a dot and a large
+n = 5 state never overflows the screen. On load the explorer opens on 5d, m = +2
+looking straight down the z-axis: the camera starts inside the cloud and pulls
+back until the full state is in frame. Drag, scroll or touch at any time to take over.
 
 ## ESA constraint toggles
 
@@ -91,8 +103,10 @@ eigenstate, is the honest picture.
 
 ## Running it
 
-Open `index.html` in a modern browser with WebGL2 (Firefox or Chrome). No build
-step, no server — it is a single self-contained file using Three.js from a CDN.
+**Live:** https://r0yb0t1th3s3.github.io/Schrodinger-Explorer/
+
+Or open `index.html` locally in a modern browser with WebGL2 (Firefox or Chrome).
+No build step, no server — it is a single self-contained file using Three.js from a CDN.
 
 ## Files
 
